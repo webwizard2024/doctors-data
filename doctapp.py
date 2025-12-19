@@ -6,51 +6,67 @@ from langchain_community.agent_toolkits import create_sql_agent
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 # ================= CONFIGURATION =================
-# CHANGE: Define two paths for the database.
-# DB_REPO_PATH is where your file is in the repository.
 DB_REPO_PATH = "doctors.db"
-# DB_PERSISTENT_PATH is a permanent storage location on Streamlit Cloud.
 DB_PERSISTENT_PATH = "/mount/data/doctors.db"
-
 GEMINI_MODEL = "gemini-2.5-flash"
 
-# CHANGE: Load the API key from Streamlit's secrets management.
+# Load the API key from Streamlit's secrets management
 try:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 except Exception as e:
     st.error("API Key not found. Please configure it in your app's secrets.")
     st.stop()
 
-# CHANGE: This block copies your database to the persistent directory.
-# This only needs to run once after the app is deployed.
-if not os.path.exists(DB_PERSISTENT_PATH):
-    if os.path.exists(DB_REPO_PATH):
-        st.info("Setting up database for the first time...")
-        # The following line is removed to avoid the PermissionError.
-        # The `/mount/data` directory should already exist on Streamlit Cloud.
-        # os.makedirs(os.path.dirname(DB_PERSISTENT_PATH), exist_ok=True) 
-        shutil.copy(DB_REPO_PATH, DB_PERSISTENT_PATH)
-    else:
-        st.error(f"Database file not found at '{DB_REPO_PATH}'. Please add it to your repository.")
+# --- A more robust setup function with better error reporting ---
+def setup_database():
+    st.write("🔍 Checking database setup...")
+    # Check if the persistent database already exists
+    if os.path.exists(DB_PERSISTENT_PATH):
+        st.write("✅ Persistent database already exists.")
+        return
+
+    # If not, check if the source file exists in the repo
+    if not os.path.exists(DB_REPO_PATH):
+        st.error(f"❌ Error: The source database file '{DB_REPO_PATH}' was not found in your repository.")
         st.stop()
+    
+    st.write(f"✅ Source database '{DB_REPO_PATH}' found. Attempting to copy...")
+    
+    # Attempt to copy the file
+    try:
+        # Ensure the target directory exists before copying
+        os.makedirs(os.path.dirname(DB_PERSISTENT_PATH), exist_ok=True)
+        shutil.copy(DB_REPO_PATH, DB_PERSISTENT_PATH)
+        st.write("✅ Database successfully copied to persistent storage.")
+    except Exception as e:
+        st.error(f"❌ Error: Failed to copy the database. The server reported an error: {e}")
+        st.stop()
+
+# Run the setup function
+setup_database()
 # =========================================
 
 # 1️⃣ Connect to the persistent SQLite database
-db = SQLDatabase.from_uri(f"sqlite:///{DB_PERSISTENT_PATH}")
+try:
+    db = SQLDatabase.from_uri(f"sqlite:///{DB_PERSISTENT_PATH}")
+    st.write("✅ Successfully connected to the database.")
+except Exception as e:
+    st.error(f"❌ Error: Could not connect to the database at {DB_PERSISTENT_PATH}. Error: {e}")
+    st.stop()
 
 # 2️⃣ Initialize Gemini LLM
-llm = ChatGoogleGenerativeAI(
-    model=GEMINI_MODEL,
-    temperature=0
-)
+try:
+    llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, temperature=0)
+except Exception as e:
+    st.error(f"Failed to initialize the Language Model. Check your API key and model name. Error: {e}")
+    st.stop()
 
 # 3️⃣ Create SQL Agent
-agent = create_sql_agent(
-    llm=llm,
-    db=db,
-    verbose=False,
-    handle_parsing_errors=True
-)
+try:
+    agent = create_sql_agent(llm=llm, db=db, verbose=False, handle_parsing_errors=True)
+except Exception as e:
+    st.error(f"Failed to create the SQL Agent. Error: {e}")
+    st.stop()
 
 # 4️⃣ Streamlit UI
 st.set_page_config(page_title="Dermatologist SQL Agent", page_icon="🩺")
@@ -74,4 +90,3 @@ if user_query:
             st.error(f"❌ An unexpected error occurred: {e}")
 
 st.markdown("---")
-st.write("This application uses a Gemini LLM to interact with a SQLite database.")
