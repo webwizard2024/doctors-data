@@ -12,7 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 DB_PATH = "/mount/data/doctors.db"
 
 # Use the correct and more efficient model name.
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # --- Securely load API key from Streamlit secrets ---
 # This will work on Streamlit Community Cloud and locally if you have a .streamlit/secrets.toml file.
